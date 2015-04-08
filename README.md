@@ -1,2 +1,2 @@
 # Presentations
-Sharing stuff from my speaker session
+Sharing stuff from my speaker sessions

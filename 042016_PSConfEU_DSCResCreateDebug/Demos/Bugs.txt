@@ -1,0 +1,2 @@
+Line 104: $Share = Get-SmbShare -Name $ShareName #-ErrorAction SilentlyContinue #Bug1 (ShareName should be Name and Erroraction)
+Line 117: foreach ($A in $ShareAccess.Account) { #bug2 Account property should be AccountName

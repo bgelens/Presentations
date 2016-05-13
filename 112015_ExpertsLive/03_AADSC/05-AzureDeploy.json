@@ -1,0 +1,123 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "allowedValues": [
+        "East US",
+        "West US",
+        "West Europe",
+        "East Asia",
+        "Southeast Asia"
+      ],
+      "metadata": {
+        "description": "Location of the existing Virtual Machine"
+      }
+    },
+    "vmName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the existing VM to apply the DSC configuration to"
+      }
+    },
+    "modulesUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "URL for the DSC configuration package. NOTE: Can be a Github url(raw) to the zip file"
+      }
+    },
+    "configurationFunction": {
+      "type": "string",
+      "defaultValue": "UpdateLCMforAAPull.ps1\\ConfigureLCMforAAPull",
+      "metadata": {
+        "description": "DSC configuration function to call. Should contain filename and function in format fileName.ps1\\configurationfunction"
+      }
+    },
+    "registrationKey": {
+      "type": "string",
+      "metadata": {
+        "description": "Registration key to use to onboard to the Azure Automation DSC pull/reporting server"
+      }
+    },
+    "registrationUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Registration url of the Azure Automation DSC pull/reporting server"
+      }
+    },
+    "nodeConfigurationName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the node configuration, on the Azure Automation DSC pull server, that this node will be configured as"
+      }
+    }
+  },
+  "variables": { },
+  "resources": [
+      {
+        "type": "Microsoft.Compute/virtualMachines/extensions",
+        "name": "[concat(parameters('vmName'),'/dscExtension')]",
+        "apiVersion": "2015-06-15",
+        "location": "[parameters('location')]",
+        "properties": {
+          "publisher": "Microsoft.Powershell",
+          "type": "DSC",
+          "typeHandlerVersion": "2.8",
+          "autoUpgradeMinorVersion": true,
+          "settings": {
+            "ModulesUrl": "[parameters('modulesUrl')]",
+            "SasToken": "",
+            "ConfigurationFunction": "[parameters('configurationFunction')]",
+            "Properties": [
+              {
+                "Name": "RegistrationKey",
+                "Value": "[parameters('registrationKey')]",
+                "TypeName": "System.String"
+              },
+              {
+                "Name": "RegistrationUrl",
+                "Value": "[parameters('registrationUrl')]",
+                "TypeName": "System.String"
+              },
+              {
+                "Name": "NodeConfigurationName",
+                "Value": "[parameters('nodeConfigurationName')]",
+                "TypeName": "System.String"
+              },
+              {
+                "Name": "ConfigurationMode",
+                "Value": "ApplyAndAutoCorrect",
+                "TypeName": "System.String"
+              },
+              {
+                "Name": "ConfigurationModeFrequencyMins",
+                "Value": 15,
+                "TypeName": "System.Int32"
+              },
+              {
+                "Name": "RefreshFrequencyMins",
+                "Value": 30,
+                "TypeName": "System.Int32"
+              },
+              {
+                "Name": "RebootNodeIfNeeded",
+                "Value": true,
+                "TypeName": "System.Boolean"
+              },
+              {
+                "Name": "ActionAfterReboot",
+                "Value": "ContinueConfiguration",
+                "TypeName": "System.String"
+              },
+              {
+                "Name": "AllowModuleOverwrite",
+                "Value": true,
+                "TypeName": "System.Boolean"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }

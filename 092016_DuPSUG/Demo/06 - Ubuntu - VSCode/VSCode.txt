@@ -1,0 +1,13 @@
+#Download VS Code:
+https://go.microsoft.com/fwlink/?LinkID=760868
+
+#User Settings:
+"terminal.integrated.shell.linux": "/usr/bin/powershell"
+
+#Key binding:
+[
+    {
+        "key": "f8",    "command": "workbench.action.terminal.runSelectedText",
+                        "when": "editorTextFocus"
+    }
+]

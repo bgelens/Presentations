@@ -1,0 +1,136 @@
+function Get-TargetResource
+{
+    [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable])]
+    param
+    (
+        [parameter(Mandatory = $true)]
+        [ValidateSet("Present","Absent")]
+        [System.String]
+        $Ensure,
+
+        [parameter(Mandatory = $true)]
+        [System.String]
+        $Path
+    )
+
+    $DockerDPath = ResolveDockerDPath -Path $Path
+    $serviceinstalled = Get-Service Docker -ErrorAction SilentlyContinue
+    return [PSCustomObject] @{
+        Ensure = $Ensure
+        Path = $DockerDPath
+        ServiceInstalled = if ($null -ne $serviceinstalled) {$true} else {$false}
+    }
+}
+
+
+function Set-TargetResource
+{
+    [CmdletBinding()]
+    param
+    (
+        [parameter(Mandatory = $true)]
+        [ValidateSet("Present","Absent")]
+        [System.String]
+        $Ensure,
+
+        [parameter(Mandatory = $true)]
+        [System.String]
+        $Path
+    )
+    
+    $DockerDPath = ResolveDockerDPath -Path $Path
+
+    if (($Ensure -eq 'Absent') -and (Get-Service -Name docker -ErrorAction SilentlyContinue))
+    {
+        Write-Verbose -Message "Docker Service is running. Stopping now."
+        Stop-Service -Name docker
+    }
+    DockerDReg -Path $DockerDPath -Ensure $Ensure
+}
+
+
+function Test-TargetResource
+{
+    [CmdletBinding()]
+    [OutputType([System.Boolean])]
+    param
+    (
+        [parameter(Mandatory = $true)]
+        [ValidateSet("Present","Absent")]
+        [System.String]
+        $Ensure,
+
+        [parameter(Mandatory = $true)]
+        [System.String]
+        $Path
+    )
+    $Service = Get-Service -Name Docker #-ErrorAction SilentlyContinue
+    if ($Ensure -eq 'Present')
+    {
+        if ($null -ne $Service)
+        {
+            return $true
+        }
+        else
+        {
+            return $false 
+        }
+    }
+    else
+    {
+        if ($null -eq $Service)
+        {
+            return $true
+        }
+        else
+        {
+            return $false
+        }
+    }
+}
+
+function ResolveDockerDPath
+{
+    param (
+        $Path
+    )
+    if ((Split-Path -Path $Path -Leaf) -eq 'dockerd.exe')
+    {
+        $DockerDPath = $Path
+    }
+    else
+    {
+        $DockerDPath = Join-Path -Path $Path -ChildPath 'dockerd.exe'
+    }
+
+    if (-not (Test-Path -Path $DockerDPath))
+    {
+        Write-Error -Message 'Dockerd.exe was not found' -ErrorAction Stop
+    }
+    else
+    {
+        Write-Output -InputObject $DockerDPath
+    }
+}
+
+function DockerDReg {
+    [CmdletBinding()]
+    param (
+        $Path,
+        $Ensure
+    )
+    if ($Ensure -eq 'Present')
+    {
+        Write-Verbose -Message 'Registering Docker Service'
+        & $Path --register-service
+    }
+    else
+    {
+        Write-Verbose -Message 'Removing Docker Service'
+        & $Path --unregister-service
+    }
+}
+
+Export-ModuleMember -Function *-TargetResource
+

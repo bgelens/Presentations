@@ -1,0 +1,313 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "assetLocation": {
+            "type": "string",
+            "defaultValue": "https://raw.githubusercontent.com/rchaganti/PSConfEU2017/master/WS1-DSCOverview",
+            "metadata": {
+                "description": "The location of resources such as templates and DSC modules that the script is dependent"
+            }
+        },
+        "adminUserName": {
+            "type": "string",
+            "defaultValue": "admin",
+            "metadata": {
+                "description": "administrator user name for the VMs."
+            }
+        },
+        "adminPassword": {
+            "type": "securestring",
+            "metadata": {
+                "description": "administrator user password for the VMs."
+            }
+        },
+        "adDomainName": {
+            "type": "string",
+            "defaultValue": "cloud.lab",
+            "metadata": {
+                "description": "Domain name FQDN for the active directory."
+            }
+        }
+    },
+    "variables": {
+        "vNetPrefix": "172.22.176.0/20",
+        "vNetName": "dsclabnet",
+        "vNetSubnetName": "subnet",
+        "vnetSubnetPrefix": "172.22.176.",
+        "vNetSubnetCIDR": "172.22.176.0/20",
+        "vNetSubnetID": "[concat(resourceId('Microsoft.Network/virtualNetworks',variables('vNetName')),'/subnets/',variables('vNetSubnetName'))]",
+        "dnsServerPrivateIp": "172.22.176.200",
+        "vmNameArray": [
+            "S16-DC",
+            "S16-01",
+            "S12R2-01"
+        ],
+        "S16-DC": {
+            "sku": "2016-Datacenter"
+        },
+        "S16-01": {
+            "sku": "2016-Datacenter"
+        },
+        "S12R2-01": {
+            "sku": "2012-R2-Datacenter"
+        }
+    },
+    "resources": [
+        {
+            "name": "dsclabnsg",
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2016-09-01",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "default-allow-rdp",
+                        "properties": {
+                            "priority": 1000,
+                            "sourceAddressPrefix": "*",
+                            "protocol": "Tcp",
+                            "destinationPortRange": "3389",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "*"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "[variables('vNetName')]",
+            "type": "Microsoft.Network/virtualNetworks",
+            "location": "[ResourceGroup().Location]",
+            "apiVersion": "2015-05-01-preview",
+            "dependsOn": [
+                "[concat('Microsoft.Network/networkSecurityGroups/', 'dsclabnsg')]"
+            ],
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[variables('vNetPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('vNetSubnetName')]",
+                        "properties": {
+                            "addressPrefix": "[variables('vNetSubnetCIDR')]",
+                            "networkSecurityGroup": {
+                                "id": "[resourceId(resourceGroup().name, 'Microsoft.Network/networkSecurityGroups', 'dsclabnsg')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "s16-DC-PIP",
+            "type": "Microsoft.Network/publicIpAddresses",
+            "apiVersion": "2016-09-01",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "publicIpAllocationMethod": "Dynamic"
+            }
+        },
+        {
+            "apiVersion": "2015-05-01-preview",
+            "type": "Microsoft.Network/networkInterfaces",
+            "name": "S16-DC-nif",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('vNetName'))]",
+                "[concat('Microsoft.Network/publicIpAddresses/', 'S16-DC-PIP')]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "S16-DC-ipconfig",
+                        "properties": {
+                            "privateIPAllocationMethod": "Static",
+                            "privateIPAddress": "[variables('dnsServerPrivateIp')]",
+                            "subnet": {
+                                "id": "[variables('vNetSubnetID')]"
+                            },
+                            "publicIpAddress": {
+                                "id": "[resourceId(resourceGroup().name ,'Microsoft.Network/publicIpAddresses', 'S16-DC-PIP')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "apiVersion": "2015-05-01-preview",
+            "type": "Microsoft.Network/networkInterfaces",
+            "name": "[concat(variables('vmNameArray')[copyIndex(1)], '-nif')]",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "vmNetworkLoop",
+                "count": "[sub(length(variables('vmNameArray')),1)]"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('vNetName'))]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "[concat(variables('vmNameArray')[copyIndex(1)], '-ipconfig')]",
+                        "properties": {
+                            "privateIPAllocationMethod": "Static",
+                            "privateIPAddress": "[concat(variables('vNetSubnetPrefix'), add(200, copyIndex(1)))]",
+                            "subnet": {
+                                "id": "[variables('vNetSubnetID')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "[variables('vmNameArray')[copyIndex()]]",
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2016-04-30-preview",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "vmCreateLoop",
+                "count": "[length(variables('vmNameArray'))]"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Network/networkInterfaces/', concat(variables('vmNameArray')[copyIndex()],'-nif'))]"
+            ],
+            "properties": {
+                "osProfile": {
+                    "computerName": "[variables('vmNameArray')[copyIndex()]]",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]",
+                    "windowsConfiguration": {
+                        "provisionVmAgent": "true"
+                    }
+                },
+                "hardwareProfile": {
+                    "vmSize": "Standard_D2_v2"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "MicrosoftWindowsServer",
+                        "offer": "WindowsServer",
+                        "sku": "[variables(variables('vmNameArray')[copyIndex()]).sku]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "[variables('vmNameArray')[copyIndex()]]",
+                        "createOption": "FromImage",
+                        "managedDisk": {
+                            "storageAccountType": "Standard_LRS"
+                        },
+                        "caching": "ReadWrite"
+                    },
+                    "dataDisks": []
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('vmNameArray')[copyIndex()],'-nif'))]"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "name": "[concat(variables('vmNameArray')[copyIndex()],'/copyScripts')]",
+            "apiVersion": "2015-06-15",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "vmCopyScriptLoop",
+                "count": 3
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Compute/virtualMachines/',variables('vmNameArray')[copyIndex()])]"
+            ],
+            "properties": {
+                "publisher": "Microsoft.Compute",
+                "type": "CustomScriptExtension",
+                "typeHandlerVersion": "1.8",
+                "autoUpgradeMinorVersion": true,
+                "settings": {
+                    "fileUris": [
+                        "[concat(parameters('assetLocation'), '/downloadScripts.ps1')]"
+                    ],
+                    "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File ', 'downloadScripts.ps1 -archiveURL https://github.com/rchaganti/PSConfEU2017/archive/master.zip')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "name": "[concat('S16-DC','/createad')]",
+            "apiVersion": "2015-05-01-preview",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Compute/virtualMachines/','S16-DC')]",
+                "[concat('Microsoft.Compute/virtualMachines/','S16-DC','/extensions/copyScripts')]"
+            ],
+            "properties": {
+                "publisher": "Microsoft.Powershell",
+                "type": "DSC",
+                "typeHandlerVersion": "2.24",
+                "settings": {
+                    "ModulesUrl": "[concat(parameters('assetLocation'),'/domainConfig.zip')]",
+                    "ConfigurationFunction": "CreateADPDC.ps1\\CreateADPDC",
+                    "Properties": {
+                        "DomainName": "[parameters('adDomainName')]",
+                        "AdminCreds": {
+                            "UserName": "[parameters('adminUsername')]",
+                            "Password": "PrivateSettingsRef:AdminPassword"
+                        }
+                    }
+                },
+                "protectedSettings": {
+                    "Items": {
+                        "AdminPassword": "[parameters('adminPassword')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "name": "[concat(variables('vmNameArray')[copyIndex(1)],'/joindomain')]",
+            "copy": {
+                "name": "vmDomainJoinLoop",
+                "count": "[sub(length(variables('vmNameArray')),1)]"
+            },
+            "apiVersion": "2015-05-01-preview",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Compute/virtualMachines/','S16-DC','/extensions/createad')]",
+                "[concat('Microsoft.Compute/virtualMachines/',variables('vmNameArray')[copyIndex(1)],'/extensions/copyScripts')]"
+            ],
+            "properties": {
+                "publisher": "Microsoft.Powershell",
+                "type": "DSC",
+                "typeHandlerVersion": "2.24",
+                "settings": {
+                    "ModulesUrl": "[concat(parameters('assetLocation'),'/domainConfig.zip')]",
+                    "ConfigurationFunction": "Configuration.ps1\\DomainJoin",
+                    "Properties": {
+                        "DomainName": "[parameters('adDomainName')]",
+                        "DNSServer": "[variables('dnsServerPrivateIp')]",
+                        "AdminCreds": {
+                            "UserName": "[parameters('adminUsername')]",
+                            "Password": "PrivateSettingsRef:AdminPassword"
+                        }
+                    }
+                },
+                "protectedSettings": {
+                    "Items": {
+                        "AdminPassword": "[parameters('adminPassword')]"
+                    }
+                }
+            }
+        }
+    ]
+}

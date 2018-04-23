@@ -1,0 +1,9 @@
+FROM microsoft/windowsservercore-insider:10.0.17623.1002
+LABEL maintainer="ben@bgelens.nl"
+COPY [ "Modules", "C:/Program Files/WindowsPowerShell/Modules/" ]
+COPY [ "Docker.ps1", "./Docker.ps1" ]
+COPY [ "sqlncli.msi", "./sqlncli.msi" ]
+COPY [ "DockerMon.ps1", "./DockerMon.ps1" ]
+RUN powershell.exe -Command .\Docker.ps1; rm .\Docker.ps1,.\sqlncli.msi
+EXPOSE 8080
+CMD ["powershell.exe", "c:\\DockerMon.ps1"]

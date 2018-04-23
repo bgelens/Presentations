@@ -1,0 +1,7 @@
+FROM microsoft/windowsservercore-insider:10.0.17623.1002
+LABEL maintainer="ben@bgelens.nl"
+COPY [ "Polaris", "./Polaris" ]
+COPY [ "adminservice.ps1", "./adminservice.ps1" ]
+COPY [ "DSCPullServerAdmin.psm1", "./DSCPullServerAdmin.psm1" ]
+EXPOSE 8080
+CMD ["powershell.exe", "c:\\adminservice.ps1"]
